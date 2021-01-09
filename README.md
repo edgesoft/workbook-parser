@@ -10,18 +10,21 @@ run yarn init && node index.js to start the server on localhost:3000
 Make a `POST` request to the server using the format below
 
 ```json
-[
-    {
-        "year": 2020,
-        "month": 8,
-        "day": 1
-    },
-      {
-        "year": 2021,
-        "month": 2,
-        "day": 12
-    }
-]
+{
+    "lang": "sv", // default is sv and the only supported language right now
+    "requestDates": [
+        {
+            "year": 2020,
+            "month": 8,
+            "day": 1
+        },
+        {
+            "year": 2021,
+            "month": 3,
+            "day": 22
+        }
+    ]
+}
 ```
 
 Response should be in the following format. There are five available sections and they can have the types specified below

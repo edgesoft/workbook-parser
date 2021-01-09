@@ -1,11 +1,8 @@
 const cheerio = require('cheerio')
 const fetch = require('node-fetch')
 const micro = require('micro')
-const { descDeviderExp, songExp } = require('./utils/regexp')
-
-const z = require('./z')
-
-const url = `https://wol.jw.org/sv/wol/dt/r14/lp-z/`
+const { descDeviderExp } = require('./utils/regexp')
+const configFile = require('./config')
 
 const sections = [
   'OVERVIEW',
@@ -28,7 +25,7 @@ const getSection = ($, sectionNumber, d) =>
     .map((_, m) => $(m).text())
     .get()
 
-const guessType = (section, name, index) => {
+const guessType = (config, section, name, index) => {
   switch (section) {
     case 'TREASURES_FROM_GODS_WORD':
       if (index === 0) return 'HIGHLIGHTS'
@@ -38,17 +35,18 @@ const guessType = (section, name, index) => {
       if (index === 1) return 'OPENING_COMMENTS'
   }
 
-  for (let i = 0; i < z.length; i++) {
-    if (z[i].sections.indexOf(section) !== -1) {
-      const patternMatch = z[i].key.exec(name)
-      if (patternMatch) return z[i].type
+  for (let i = 0; i < config.regExps.length; i++) {
+    const exp = config.regExps[i]
+    if (exp.sections.indexOf(section) !== -1) {
+      const patternMatch = exp.key.exec(name)
+      if (patternMatch) return exp.type
     }
   }
 
   return 'UNKNOWN'
 }
 
-const filterDescription = (arr, section) => {
+const filterDescription = (config, arr, section) => {
   return arr.map((i, s) => {
     const str = arr[s]
 
@@ -62,19 +60,19 @@ const filterDescription = (arr, section) => {
       return {
         label: name,
         description: description.length > 0 ? description : null,
-        type: guessType(section, name, s),
+        type: guessType(config, section, name, s),
       }
     }
 
     return {
       label: str.trim(),
       description: null,
-      type: guessType(section, str.trim(), s),
+      type: guessType(config, section, str.trim(), s),
     }
   })
 }
 
-const getWorkbook = async (year, month, day) => {
+const getWorkbook = async (url, { year, month, day }) => {
   const response = await fetch(`${url}/${year}/${month}/${day}`, {
     headers: {
       'sec-fetch-site': 'same-origin',
@@ -90,10 +88,21 @@ const getWorkbook = async (year, month, day) => {
 const server = micro(async (req, res) => {
   if (req.method !== 'POST') return micro.send(res, 405, 'metod not allowed')
 
-  const data = await micro.json(req)
+  const { lang = 'sv', requestDates } = await micro.json(req)
+  if (!requestDates && !Array.isArray(requestDates))
+    return micro.send(res, 401, 'Read information about correct input')
+
+  const config = configFile[lang]
+  if (!config)
+    return micro.send(
+      res,
+      401,
+      `Read information about correct input. Missing lang: ${lang}`
+    )
+
   const promises = await Promise.all(
-    data.map(async (d) => {
-      const $ = await getWorkbook(d.year, d.month, d.day)
+    requestDates.map(async (d) => {
+      const $ = await getWorkbook(config.url, d)
       return {
         ...d,
         data: {
@@ -111,6 +120,7 @@ const server = micro(async (req, res) => {
           ...sections.reduce((acc, _, i) => {
             if (i > 0)
               acc[`${sections[i]}`] = filterDescription(
+                config,
                 getSection($, i, d),
                 sections[i]
               )
