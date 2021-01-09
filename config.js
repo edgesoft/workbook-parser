@@ -10,6 +10,7 @@ module.exports = {
           'APPLY_YOURSELF_MINISTRY',
           'LIVING_AS_CHRISTIANS',
         ],
+        min: 5,
       },
       {
         key: /Församlingens bibelstudium: \(([a-z]*?\s)?\d* min\.\)/,

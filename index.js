@@ -1,16 +1,7 @@
 const cheerio = require('cheerio')
-const fetch = require('node-fetch')
 const micro = require('micro')
-const { descDeviderExp } = require('./utils/regexp')
+const { regExps, sections, getWorkbook, cache } = require('./utils')
 const configFile = require('./config')
-
-const sections = [
-  'OVERVIEW',
-  'INTRODUCTION',
-  'TREASURES_FROM_GODS_WORD',
-  'APPLY_YOURSELF_MINISTRY',
-  'LIVING_AS_CHRISTIANS',
-]
 
 const getElements = ({ year, month, day }) => {
   if (year < 2021) return '.su'
@@ -24,6 +15,15 @@ const getSection = ($, sectionNumber, d) =>
     .find(getElements(d))
     .map((_, m) => $(m).text())
     .get()
+
+const getEstimatedTime = (type) => {
+  switch (type) {
+    case 'SONG':
+      return 5
+    default:
+      return null
+  }
+}
 
 const guessType = (config, section, name, index) => {
   switch (section) {
@@ -50,45 +50,41 @@ const filterDescription = (config, arr, section) => {
   return arr.map((i, s) => {
     const str = arr[s]
 
-    const patternMatch = descDeviderExp.exec(str)
+    const patternMatch = regExps.descDeviderExp.exec(str)
 
     if (patternMatch) {
       const description = str
         .substr(patternMatch.index + patternMatch[0].length, str.length)
         .trim()
       const name = (str.substr(0, patternMatch.index) + patternMatch[0]).trim()
+      const time = parseInt(patternMatch[0].match(regExps.numExp)[0], 10)
       return {
         label: name,
         description: description.length > 0 ? description : null,
         type: guessType(config, section, name, s),
+        time,
       }
     }
+
+    const type = guessType(config, section, str.trim(), s)
 
     return {
       label: str.trim(),
       description: null,
-      type: guessType(config, section, str.trim(), s),
+      type,
+      time: getEstimatedTime(type),
     }
   })
-}
-
-const getWorkbook = async (url, { year, month, day }) => {
-  const response = await fetch(`${url}/${year}/${month}/${day}`, {
-    headers: {
-      'sec-fetch-site': 'same-origin',
-      'sec-fetch-mode': 'cors',
-      'user-agent':
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3968.0 Safari/537.36',
-    },
-  })
-
-  return cheerio.load(await response.text())
 }
 
 const server = micro(async (req, res) => {
   if (req.method !== 'POST') return micro.send(res, 405, 'metod not allowed')
 
-  const { lang = 'sv', requestDates } = await micro.json(req)
+  const {
+    lang = 'sv',
+    requestDates,
+    invalidateCache = false,
+  } = await micro.json(req)
   if (!requestDates && !Array.isArray(requestDates))
     return micro.send(res, 401, 'Read information about correct input')
 
@@ -102,31 +98,42 @@ const server = micro(async (req, res) => {
 
   const promises = await Promise.all(
     requestDates.map(async (d) => {
-      const $ = await getWorkbook(config.url, d)
-      return {
-        ...d,
-        data: {
-          OVERVIEW: $('.itemData header')
-            .eq(1)
-            .children()
-            .map((_, m) => $(m).text())
-            .get()
-            .map((m, i) => {
-              return {
-                label: m,
-                type: i === 0 ? 'DATE' : 'BIBLE_READING',
-              }
-            }),
-          ...sections.reduce((acc, _, i) => {
-            if (i > 0)
-              acc[`${sections[i]}`] = filterDescription(
-                config,
-                getSection($, i, d),
-                sections[i]
-              )
-            return acc
-          }, {}),
-        },
+      if (invalidateCache) cache.set({ ...d, lang, data: null })
+      const c = cache.get({ ...d, lang })
+      if (c) {
+        return {
+          ...c,
+        }
+      } else {
+        const payload = await getWorkbook(config.url, d)
+        const $ = cheerio.load(payload)
+        const data = {
+          ...d,
+          data: {
+            OVERVIEW: $('.itemData header')
+              .eq(1)
+              .children()
+              .map((_, m) => $(m).text())
+              .get()
+              .map((m, i) => {
+                return {
+                  label: m,
+                  type: i === 0 ? 'DATE' : 'BIBLE_READING',
+                }
+              }),
+            ...sections.reduce((acc, _, i) => {
+              if (i > 0)
+                acc[`${sections[i]}`] = filterDescription(
+                  config,
+                  getSection($, i, d),
+                  sections[i]
+                )
+              return acc
+            }, {}),
+          },
+        }
+        cache.set({ ...d, lang, data })
+        return data
       }
     })
   )
