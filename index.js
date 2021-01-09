@@ -98,7 +98,7 @@ const server = micro(async (req, res) => {
 
   const promises = await Promise.all(
     requestDates.map(async (d) => {
-      if (invalidateCache) cache.set({ ...d, lang, data: null })
+      if (d.invalidateCache) cache.set({ ...d, lang, data: null })
       const c = cache.get({ ...d, lang })
       if (c) {
         return {

@@ -10,17 +10,22 @@ run yarn init && node index.js to start the server on localhost:3000
 Make a `POST` request to the server using the format below
 
 - `lang` the language code. sv is currently the only supported locale
-- `invalidateCache` if set to true we will fetch from wol otherwise try to get from cache
+- `requestDates` array
+  - `year` mandatory
+  - `month` mandatory
+  - `day` mandatory
+  - `invalidateCache`if set to true we will fetch from wol otherwise try to get from cache. Not mandatory
+
   
 ```json
 {
     "lang": "sv",
-    "invalidateCache": true,
     "requestDates": [
         {
             "year": 2020,
             "month": 8,
-            "day": 1
+            "day": 1,
+             "invalidateCache": true
         },
         {
             "year": 2021,
