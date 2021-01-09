@@ -105,7 +105,7 @@ const server = micro(async (req, res) => {
             .map((m, i) => {
               return {
                 label: m,
-                type: i === 0 ? 'DATE' : 'BIBLE_READING ',
+                type: i === 0 ? 'DATE' : 'BIBLE_READING',
               }
             }),
           ...sections.reduce((acc, _, i) => {
