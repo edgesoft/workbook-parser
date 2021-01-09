@@ -1,6 +1,9 @@
 const cheerio = require('cheerio')
 const fetch = require('node-fetch')
 const micro = require('micro')
+const { descDeviderExp, songExp } = require('./utils/regexp')
+
+const z = require('./z')
 
 const url = `https://wol.jw.org/sv/wol/dt/r14/lp-z/`
 
@@ -25,24 +28,49 @@ const getSection = ($, sectionNumber, d) =>
     .map((_, m) => $(m).text())
     .get()
 
+const guessType = (section, name, index) => {
+  switch (section) {
+    case 'TREASURES_FROM_GODS_WORD':
+      if (index === 0) return 'HIGHLIGHTS'
+      if (index === 1) return 'GEMS'
+      if (index === 2) return 'BIBLE_READING'
+    case 'INTRODUCTION':
+      if (index === 1) return 'OPENING_COMMENTS'
+  }
+
+  for (let i = 0; i < z.length; i++) {
+    if (z[i].sections.indexOf(section) !== -1) {
+      const patternMatch = z[i].key.exec(name)
+      if (patternMatch) return z[i].type
+    }
+  }
+
+  return 'UNKNOWN'
+}
+
 const filterDescription = (arr, section) => {
   return arr.map((i, s) => {
     const str = arr[s]
-    const regExp = /\(([a-z]*?\s)?\d* min\.\)/g
-    const patternMatch = regExp.exec(str)
+
+    const patternMatch = descDeviderExp.exec(str)
 
     if (patternMatch) {
       const description = str
         .substr(patternMatch.index + patternMatch[0].length, str.length)
         .trim()
+      const name = (str.substr(0, patternMatch.index) + patternMatch[0]).trim()
       return {
-        label: str.substr(0, patternMatch.index) + patternMatch[0],
+        label: name,
         description: description.length > 0 ? description : null,
-        section,
+        type: guessType(section, name, s),
       }
     }
 
-    return { label: str, description: null }
+    return {
+      label: str.trim(),
+      description: null,
+      type: guessType(section, str.trim(), s),
+    }
   })
 }
 
@@ -82,7 +110,10 @@ const server = micro(async (req, res) => {
             }),
           ...sections.reduce((acc, _, i) => {
             if (i > 0)
-              acc[`${sections[i]}`] = filterDescription(getSection($, i, d))
+              acc[`${sections[i]}`] = filterDescription(
+                getSection($, i, d),
+                sections[i]
+              )
             return acc
           }, {}),
         },
