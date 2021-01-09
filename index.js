@@ -1,6 +1,6 @@
 const cheerio = require('cheerio')
 const micro = require('micro')
-const { regExps, sections, getWorkbook, cache } = require('./utils')
+const { filterDescription, sections, getWorkbook, cache } = require('./utils')
 const configFile = require('./config')
 
 const getElements = ({ year, month, day }) => {
@@ -16,75 +16,10 @@ const getSection = ($, sectionNumber, d) =>
     .map((_, m) => $(m).text())
     .get()
 
-const getEstimatedTime = (type) => {
-  switch (type) {
-    case 'SONG':
-      return 5
-    default:
-      return null
-  }
-}
-
-const guessType = (config, section, name, index) => {
-  switch (section) {
-    case 'TREASURES_FROM_GODS_WORD':
-      if (index === 0) return 'HIGHLIGHTS'
-      if (index === 1) return 'GEMS'
-      if (index === 2) return 'BIBLE_READING'
-    case 'INTRODUCTION':
-      if (index === 1) return 'OPENING_COMMENTS'
-  }
-
-  for (let i = 0; i < config.regExps.length; i++) {
-    const exp = config.regExps[i]
-    if (exp.sections.indexOf(section) !== -1) {
-      const patternMatch = exp.key.exec(name)
-      if (patternMatch) return exp.type
-    }
-  }
-
-  return 'UNKNOWN'
-}
-
-const filterDescription = (config, arr, section) => {
-  return arr.map((i, s) => {
-    const str = arr[s]
-
-    const patternMatch = regExps.descDeviderExp.exec(str)
-
-    if (patternMatch) {
-      const description = str
-        .substr(patternMatch.index + patternMatch[0].length, str.length)
-        .trim()
-      const name = (str.substr(0, patternMatch.index) + patternMatch[0]).trim()
-      const time = parseInt(patternMatch[0].match(regExps.numExp)[0], 10)
-      return {
-        label: name,
-        description: description.length > 0 ? description : null,
-        type: guessType(config, section, name, s),
-        time,
-      }
-    }
-
-    const type = guessType(config, section, str.trim(), s)
-
-    return {
-      label: str.trim(),
-      description: null,
-      type,
-      time: getEstimatedTime(type),
-    }
-  })
-}
-
 const server = micro(async (req, res) => {
   if (req.method !== 'POST') return micro.send(res, 405, 'metod not allowed')
 
-  const {
-    lang = 'sv',
-    requestDates,
-    invalidateCache = false,
-  } = await micro.json(req)
+  const { lang = 'sv', requestDates } = await micro.json(req)
   if (!requestDates && !Array.isArray(requestDates))
     return micro.send(res, 401, 'Read information about correct input')
 
