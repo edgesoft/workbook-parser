@@ -1,0 +1,14 @@
+{
+  "name": "workbook-parser",
+  "version": "1.0.0",
+  "description": "Small application to fetch meeting workbook data and return json",
+  "main": "index.js",
+  "author": "Mathias Nilsson",
+  "license": "MIT",
+  "private": false,
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.5",
+    "micro": "^9.3.4",
+    "node-fetch": "^2.6.1"
+  }
+}
